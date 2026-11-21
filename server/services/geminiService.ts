@@ -8,6 +8,7 @@ import type {
   LanguageCode,
   UserProfile,
 } from '../../src/types/freshair.ts';
+import { calculateCpcbAqi } from '../../src/utils/aqi.ts';
 
 const PRIMARY_MODEL = 'gemini-4-hydrogen';
 const FALLBACK_MODEL = 'gemini-3.1-flash-lite';
@@ -114,7 +115,17 @@ function buildVerifiedContextBlock(
     lines.push(`DATA SOURCE: ${env.airQuality.source} & ${env.weather.source}`);
     lines.push(`AIR QUALITY STATUS: ${env.airQuality.status.toUpperCase()}`);
     lines.push(`MEASURED AT (LOCAL): ${env.airQuality.measuredAt ?? 'UNAVAILABLE'}`);
-    lines.push(`- US AQI: ${fmtReading(env.airQuality.usAqi, '(0-500 scale)')}`);
+    lines.push(`- US AQI: ${fmtReading(env.airQuality.usAqi, '(0-500 scale, EPA standard)')}`);
+    const cpcb = calculateCpcbAqi(env.airQuality);
+    if (cpcb.isComplete && cpcb.aqi !== null) {
+      lines.push(
+        `- India CPCB National AQI: ${cpcb.aqi} (${cpcb.category.label}) [Dominant: ${cpcb.dominantPollutant?.name ?? 'N/A'}]`,
+      );
+    } else {
+      lines.push(
+        `- India CPCB National AQI: Incomplete / Unavailable (${cpcb.missingRequirements.join('; ')})`,
+      );
+    }
     lines.push(`- European AQI: ${fmtReading(env.airQuality.europeanAqi, '')}`);
     lines.push(`- PM2.5: ${fmtReading(env.airQuality.pm25, 'µg/m³')}`);
     lines.push(`- PM10: ${fmtReading(env.airQuality.pm10, 'µg/m³')}`);
@@ -156,7 +167,8 @@ const CORE_SAFETY_RULES = `STRICT RULES:
 1. NEVER fabricate, estimate, or invent AQI, PM2.5, PM10, pollutant, or weather numbers.
 2. Only cite measurements explicitly provided in the VERIFIED ENVIRONMENTAL CONTEXT below. If a reading is marked UNAVAILABLE, state plainly that it is unavailable.
 3. Keep all health guidance strictly informational and precautionary — never diagnose medical conditions or replace licensed doctors or official public health advisories.
-4. Keep advice concrete, actionable, and tailored to urban smog and everyday family living.`;
+4. Keep advice concrete, actionable, and tailored to urban smog and everyday family living.
+5. Never confuse US AQI (EPA 0-500 scale) with India's CPCB National AQI (0-500 scale with categories: Good 0-50, Satisfactory 51-100, Moderate 101-200, Poor 201-300, Very Poor 301-400, Severe 401-500). When referencing air quality for Indian locations, cite India's CPCB NAQI and dominant pollutant explicitly.`;
 
 function extractReadableErrorMessage(raw: string): string {
   try {

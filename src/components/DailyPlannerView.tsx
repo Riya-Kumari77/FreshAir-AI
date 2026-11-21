@@ -314,6 +314,9 @@ export const DailyPlannerView: React.FC<DailyPlannerViewProps> = ({
                       <div key={row.id} className="space-y-1">
                         <button
                           type="button"
+                          role="checkbox"
+                          aria-checked={checked}
+                          aria-label={`${row.heading}: ${checked ? 'completed' : 'pending'}`}
                           onClick={() => toggleDone(row.id)}
                           className="flex items-center gap-2 text-left text-xs font-semibold text-[#0F1F1C] hover:text-[#0F766E]"
                         >

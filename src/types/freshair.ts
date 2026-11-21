@@ -35,6 +35,48 @@ export interface AirQualityMetrics {
   errorMessage?: string;
 }
 
+export type CpcbAqiCategoryLevel =
+  | 'good'
+  | 'satisfactory'
+  | 'moderate'
+  | 'poor'
+  | 'very_poor'
+  | 'severe'
+  | 'insufficient_data';
+
+export interface CpcbSubIndexItem {
+  pollutant: string;
+  name: string;
+  concentration: number;
+  unit: string;
+  subIndex: number;
+}
+
+export interface CpcbAqiResult {
+  aqi: number | null;
+  category: {
+    level: CpcbAqiCategoryLevel;
+    label: string;
+    labelHi: string;
+    description: string;
+    descriptionHi: string;
+    textColor: string;
+    surfaceColor: string;
+    barColor: string;
+    borderColor: string;
+  };
+  dominantPollutant: {
+    code: string;
+    name: string;
+    subIndex: number;
+  } | null;
+  subIndices: Record<string, CpcbSubIndexItem>;
+  isComplete: boolean;
+  monitoredCount: number;
+  hasRequiredParticulate: boolean;
+  missingRequirements: string[];
+}
+
 export interface WeatherMetrics {
   temperatureC: number | null;
   apparentTemperatureC: number | null;

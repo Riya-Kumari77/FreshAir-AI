@@ -30,6 +30,7 @@ import type {
   UserProfile,
 } from '../types/freshair';
 import {
+  calculateCpcbAqi,
   formatReading,
   formatTemperature,
   formatTimestamp,
@@ -75,6 +76,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const aq = environment?.airQuality ?? null;
   const weather = environment?.weather ?? null;
   const aqiMeta = getUsAqiCategory(aq?.usAqi ?? null);
+  const cpcbResult = useMemo(() => calculateCpcbAqi(aq), [aq]);
 
   const aqiMarkerPercent = useMemo(() => {
     if (aq?.usAqi === null || aq?.usAqi === undefined) return null;
@@ -285,8 +287,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </p>
 
           {/* AQI Spectrum Track */}
-          <div className="mt-6 pt-5 border-t border-[#EDF1EE]">
-            <div className="relative h-2.5 w-full rounded-full overflow-hidden flex">
+          <div
+            role="meter"
+            aria-label={language === 'hi' ? 'वायु गुणवत्ता सूचकांक पैमाना' : 'Air Quality Index meter'}
+            aria-valuenow={aq?.usAqi !== null && aq?.usAqi !== undefined ? Math.round(aq.usAqi) : undefined}
+            aria-valuemin={0}
+            aria-valuemax={500}
+            aria-valuetext={
+              aq?.usAqi !== null && aq?.usAqi !== undefined
+                ? `${Math.round(aq.usAqi)} - ${aqiMeta.label}`
+                : 'Unavailable'
+            }
+            className="mt-6 pt-5 border-t border-[#EDF1EE]"
+          >
+            <div className="relative h-2.5 w-full rounded-full overflow-hidden flex" aria-hidden="true">
               <div className="h-full flex-1 bg-[#16A34A]" title="0–50 Good" />
               <div className="h-full flex-1 bg-[#EAB308]" title="51–100 Moderate" />
               <div className="h-full flex-1 bg-[#F97316]" title="101–150 Unhealthy for Sensitive" />
@@ -295,7 +309,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <div className="h-full flex-1 bg-[#9F1239]" title="301+ Hazardous" />
             </div>
             {aqiMarkerPercent !== null && (
-              <div className="relative h-4 mt-1">
+              <div className="relative h-4 mt-1" aria-hidden="true">
                 <div
                   className="absolute -translate-x-1/2 flex flex-col items-center"
                   style={{ left: `${aqiMarkerPercent}%` }}
@@ -307,12 +321,81 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </div>
               </div>
             )}
-            <div className="mt-1 flex items-center justify-between text-[11px] font-mono tabular-nums text-[#647571]">
+            <div className="mt-1 flex items-center justify-between text-[11px] font-mono tabular-nums text-[#647571]" aria-hidden="true">
               <span>0 Good</span>
               <span>100 Moderate</span>
               <span>200 Unhealthy</span>
-              <span>300+ Severe</span>
+              <span>300+ Hazardous</span>
             </div>
+          </div>
+
+          {/* CPCB National AQI (India) Standard Display */}
+          <div className="mt-6 pt-5 border-t border-[#EDF1EE]">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-[#0F766E]/10 text-[#0F766E]">
+                  CPCB NAQI (India)
+                </span>
+                <span className="text-xs text-[#647571]">
+                  {language === 'hi' ? 'केंद्रीय प्रदूषण नियंत्रण बोर्ड मानक' : 'Central Pollution Control Board Standard'}
+                </span>
+              </div>
+              {cpcbResult.isComplete && cpcbResult.dominantPollutant && (
+                <span className="text-xs font-mono font-medium text-[#445652] bg-[#F2F5F3] px-2 py-0.5 rounded">
+                  Dominant: {cpcbResult.dominantPollutant.name} ({cpcbResult.dominantPollutant.subIndex})
+                </span>
+              )}
+            </div>
+
+            {cpcbResult.isComplete ? (
+              <div className="mt-3 flex flex-wrap items-baseline gap-4">
+                <span className="font-mono tabular-nums text-3xl sm:text-4xl font-semibold text-[#0F1F1C]">
+                  {cpcbResult.aqi}
+                </span>
+                <div>
+                  <span
+                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${cpcbResult.category.textColor} ${cpcbResult.category.surfaceColor} border ${cpcbResult.category.borderColor}`}
+                  >
+                    {language === 'hi' ? cpcbResult.category.labelHi : cpcbResult.category.label}
+                  </span>
+                  <p className="mt-1 text-xs text-[#526460]">
+                    {language === 'hi' ? cpcbResult.category.descriptionHi : cpcbResult.category.description}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3 p-3 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs font-semibold text-[#64748B] uppercase tracking-wide">
+                    CPCB AQI Incomplete
+                  </span>
+                  <span className="text-[11px] text-[#94A3B8]">·</span>
+                  <span className="text-[11px] text-[#64748B]">
+                    {cpcbResult.monitoredCount} / 3 required pollutants measured
+                  </span>
+                </div>
+                <p className="mt-1.5 text-xs text-[#475569] leading-relaxed">
+                  {cpcbResult.missingRequirements.join(' ')}
+                </p>
+              </div>
+            )}
+
+            {/* CPCB Sub-indices Breakdown */}
+            {Object.keys(cpcbResult.subIndices).length > 0 && (
+              <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] font-mono">
+                <span className="text-[#647571] font-sans text-xs mr-1">Sub-indices:</span>
+                {Object.values(cpcbResult.subIndices).map((sub) => (
+                  <span
+                    key={sub.pollutant}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#F2F5F3] text-[#334155] border border-[#E2E8E4]"
+                    title={`${sub.name}: ${sub.concentration} ${sub.unit} -> CPCB Sub-index ${sub.subIndex}`}
+                  >
+                    <span className="font-semibold text-[#0F1F1C]">{sub.name}</span>
+                    <span className="tabular-nums font-bold">{sub.subIndex}</span>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -396,26 +479,52 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:gap-4">
           {pollutantRows.map((item) => {
             const unavailable = item.value === null || item.value === undefined;
+            const pollutantSubKey =
+              item.code === 'PM2.5'
+                ? 'pm25'
+                : item.code === 'PM10'
+                  ? 'pm10'
+                  : item.code === 'NO₂'
+                    ? 'no2'
+                    : item.code === 'O₃'
+                      ? 'o3'
+                      : item.code === 'SO₂'
+                        ? 'so2'
+                        : item.code === 'CO'
+                          ? 'co'
+                          : null;
+            const subIndexObj = pollutantSubKey ? cpcbResult.subIndices[pollutantSubKey] : null;
+
             return (
               <div
                 key={item.code}
                 className="py-3.5 sm:p-4 sm:border sm:border-[#EDF1EE] sm:rounded-lg flex flex-col justify-between"
               >
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="font-display text-sm font-semibold text-[#0F1F1C]">{item.code}</span>
-                  <span className="text-[11px] text-[#647571]">{item.guideline}</span>
+                <div>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="font-display text-sm font-semibold text-[#0F1F1C]">{item.code}</span>
+                    <span className="text-[11px] text-[#647571]">{item.guideline}</span>
+                  </div>
+                  <p className="text-xs text-[#526460] mt-0.5">{item.name}</p>
                 </div>
-                <p className="text-xs text-[#526460] mt-0.5">{item.name}</p>
-                <div className="mt-3 flex items-baseline gap-1.5">
-                  {unavailable ? (
-                    <span className="text-sm font-medium text-[#647571]">Unavailable</span>
-                  ) : (
-                    <>
-                      <span className="font-mono tabular-nums text-2xl font-semibold text-[#0F1F1C]">
-                        {item.value?.toFixed(1)}
-                      </span>
-                      <span className="text-xs text-[#647571] font-mono">{item.unit}</span>
-                    </>
+                <div>
+                  <div className="mt-3 flex items-baseline gap-1.5">
+                    {unavailable ? (
+                      <span className="text-sm font-medium text-[#647571]">Unavailable</span>
+                    ) : (
+                      <>
+                        <span className="font-mono tabular-nums text-2xl font-semibold text-[#0F1F1C]">
+                          {item.value?.toFixed(1)}
+                        </span>
+                        <span className="text-xs text-[#647571] font-mono">{item.unit}</span>
+                      </>
+                    )}
+                  </div>
+                  {subIndexObj && (
+                    <div className="mt-2 text-[11px] font-mono text-[#0F766E] flex items-center justify-between border-t border-[#EDF1EE] pt-1.5">
+                      <span>CPCB Sub-Index</span>
+                      <span className="font-semibold">{subIndexObj.subIndex}</span>
+                    </div>
                   )}
                 </div>
               </div>

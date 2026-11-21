@@ -1,12 +1,9 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState, Suspense } from 'react';
 import { LayoutShell } from './components/LayoutShell';
 import { LocationSelectorModal } from './components/LocationSelectorModal';
 import { DashboardView } from './components/DashboardView';
 import { AssistantView } from './components/AssistantView';
 import { DailyPlannerView } from './components/DailyPlannerView';
-import { IndoorAirView } from './components/IndoorAirView';
-import { SustainabilityView } from './components/SustainabilityView';
-import { ProfileView } from './components/ProfileView';
 import { DEFAULT_USER_PROFILE } from './data/constants';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import {
@@ -22,6 +19,26 @@ import type {
   SavedRecommendation,
   UserProfile,
 } from './types/freshair';
+
+const IndoorAirView = React.lazy(() =>
+  import('./components/IndoorAirView').then((m) => ({ default: m.IndoorAirView })),
+);
+const SustainabilityView = React.lazy(() =>
+  import('./components/SustainabilityView').then((m) => ({ default: m.SustainabilityView })),
+);
+const ProfileView = React.lazy(() =>
+  import('./components/ProfileView').then((m) => ({ default: m.ProfileView })),
+);
+
+function ViewLoadingFallback() {
+  return (
+    <div className="space-y-6 animate-pulse" aria-busy="true" aria-label="Loading view">
+      <div className="h-8 w-64 bg-[#E6ECE9] rounded-lg" />
+      <div className="h-48 bg-white border border-[#E2E8E4] rounded-xl" />
+      <div className="h-64 bg-white border border-[#E2E8E4] rounded-xl" />
+    </div>
+  );
+}
 
 export function App() {
   const [activeTab, setActiveTab] = useState<AppTab>('dashboard');
@@ -209,36 +226,42 @@ export function App() {
       )}
 
       {activeTab === 'indoor' && (
-        <IndoorAirView
-          environment={environment}
-          profile={profile}
-          language={profile.language}
-          savedItems={savedItems}
-          onToggleSave={handleToggleSaveRecommendation}
-        />
+        <Suspense fallback={<ViewLoadingFallback />}>
+          <IndoorAirView
+            environment={environment}
+            profile={profile}
+            language={profile.language}
+            savedItems={savedItems}
+            onToggleSave={handleToggleSaveRecommendation}
+          />
+        </Suspense>
       )}
 
       {activeTab === 'sustainability' && (
-        <SustainabilityView
-          language={profile.language}
-          defaultCommuteKm={profile.dailyCommuteKm}
-        />
+        <Suspense fallback={<ViewLoadingFallback />}>
+          <SustainabilityView
+            language={profile.language}
+            defaultCommuteKm={profile.dailyCommuteKm}
+          />
+        </Suspense>
       )}
 
       {activeTab === 'profile' && (
-        <ProfileView
-          profile={profile}
-          onUpdateProfile={(next) => {
-            setProfile(next);
-            if (next.defaultLocation.id !== profile.defaultLocation.id) {
-              handleSelectLocation(next.defaultLocation);
-            }
-          }}
-          activeLocation={location}
-          onOpenLocationPicker={() => setLocationModalOpen(true)}
-          savedItems={savedItems}
-          onRemoveSavedItem={handleRemoveSavedItem}
-        />
+        <Suspense fallback={<ViewLoadingFallback />}>
+          <ProfileView
+            profile={profile}
+            onUpdateProfile={(next) => {
+              setProfile(next);
+              if (next.defaultLocation.id !== profile.defaultLocation.id) {
+                handleSelectLocation(next.defaultLocation);
+              }
+            }}
+            activeLocation={location}
+            onOpenLocationPicker={() => setLocationModalOpen(true)}
+            savedItems={savedItems}
+            onRemoveSavedItem={handleRemoveSavedItem}
+          />
+        </Suspense>
       )}
 
       <LocationSelectorModal

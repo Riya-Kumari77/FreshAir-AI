@@ -17,6 +17,7 @@ import {
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import type { LanguageCode, SustainabilityLogEntry } from '../types/freshair';
 import { getLocalDateIso } from '../utils/aqi';
+import { calculateTripSavingsKg } from '../utils/calculations';
 
 interface SustainabilityViewProps {
   language: LanguageCode;
@@ -55,9 +56,12 @@ export const SustainabilityView: React.FC<SustainabilityViewProps> = ({
     ALTERNATIVE_TRANSPORT_MODES.find((m) => m.id === alternativeId) ?? ALTERNATIVE_TRANSPORT_MODES[0];
 
   const estimatedTripSavingsKg = useMemo(() => {
-    const deltaGramsPerKm = Math.max(0, baselineMode.gramsCo2PerKm - alternativeMode.gramsCo2PerKm);
-    return Number(((distanceKm * deltaGramsPerKm) / 1000).toFixed(2));
-  }, [distanceKm, baselineMode, alternativeMode]);
+    return calculateTripSavingsKg(
+      distanceKm,
+      baselineMode.gramsCo2PerKm,
+      alternativeMode.gramsCo2PerKm,
+    );
+  }, [distanceKm, baselineMode.gramsCo2PerKm, alternativeMode.gramsCo2PerKm]);
 
   const weeklyChartData = useMemo(() => {
     const days: Array<{ dateISO: string; label: string; co2Kg: number; actionsCount: number }> = [];

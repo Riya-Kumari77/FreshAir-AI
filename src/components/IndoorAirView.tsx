@@ -20,6 +20,7 @@ import type {
   UserProfile,
 } from '../types/freshair';
 import { findCleanestWindow, formatReading } from '../utils/aqi';
+import { calculateHepaCadr } from '../utils/calculations';
 
 interface IndoorAirViewProps {
   environment: EnvironmentalSnapshot | null;
@@ -102,19 +103,10 @@ export const IndoorAirView: React.FC<IndoorAirViewProps> = ({
     };
   }, [aq?.pm25, aq?.usAqi, cleanestWindow]);
 
-  const cadrCalc = useMemo(() => {
-    const areaSqFt = Math.max(20, roomLengthFt * roomWidthFt);
-    const volumeCuFt = areaSqFt * Math.max(7, ceilingHeightFt);
-    const volumeM3 = volumeCuFt * 0.0283168;
-    const recommendedCadrM3h = Math.round(volumeM3 * targetAch);
-    const recommendedCadrCfm = Math.round(recommendedCadrM3h / 1.699);
-    return {
-      areaSqFt: Math.round(areaSqFt),
-      volumeM3: Number(volumeM3.toFixed(1)),
-      recommendedCadrM3h,
-      recommendedCadrCfm,
-    };
-  }, [roomLengthFt, roomWidthFt, ceilingHeightFt, targetAch]);
+  const cadrCalc = useMemo(
+    () => calculateHepaCadr(roomLengthFt, roomWidthFt, ceilingHeightFt, targetAch),
+    [roomLengthFt, roomWidthFt, ceilingHeightFt, targetAch],
+  );
 
   const allChecklistCount = useMemo(
     () => INDOOR_GUIDE_TOPICS.reduce((acc, t) => acc + t.checklist.length, 0),
@@ -416,6 +408,9 @@ export const IndoorAirView: React.FC<IndoorAirViewProps> = ({
                     <div key={item.id} className="py-3 first:pt-0 last:pb-0">
                       <button
                         type="button"
+                        role="checkbox"
+                        aria-checked={checked}
+                        aria-label={item.text}
                         onClick={() => toggleTip(item.id)}
                         className="w-full flex items-start gap-2.5 text-left group"
                       >

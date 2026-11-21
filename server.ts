@@ -1,4 +1,6 @@
 import express from 'express';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -32,15 +34,75 @@ function sendNormalizedError(res: express.Response, err: unknown, fallbackMessag
   const status = typeof e?.statusCode === 'number' && e.statusCode >= 400 && e.statusCode < 600
     ? e.statusCode
     : 500;
+
+  let message = typeof e?.message === 'string' && e.message.trim() ? e.message : fallbackMessage;
+
+  // Redact any accidental secret/API key strings
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  if (apiKey && apiKey.length > 5 && message.includes(apiKey)) {
+    message = message.replaceAll(apiKey, '[REDACTED_SECRET]');
+  }
+
   res.status(status).json({
-    error: e?.message || fallbackMessage,
+    error: message,
     code: e?.code || 'INTERNAL_ERROR',
   });
 }
 
-async function startServer() {
+export function createExpressApp(): express.Express {
   const app = express();
+
+  // HTTP security headers
+  app.use(
+    helmet({
+      contentSecurityPolicy: IS_PROD
+        ? {
+            directives: {
+              defaultSrc: ["'self'"],
+              scriptSrc: ["'self'", "'unsafe-inline'"],
+              styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+              fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+              connectSrc: [
+                "'self'",
+                'https://air-quality-api.open-meteo.com',
+                'https://api.open-meteo.com',
+                'https://geocoding-api.open-meteo.com',
+              ],
+              imgSrc: ["'self'", 'data:', 'https:'],
+            },
+          }
+        : false,
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
+
   app.use(express.json({ limit: '1mb' }));
+
+  // General API rate limiter (180 requests/minute per client IP)
+  const apiLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    limit: 180,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+      error: 'Too many requests from this client. Please slow down and try again shortly.',
+      code: 'RATE_LIMIT_EXCEEDED',
+    },
+  });
+  app.use('/api/', apiLimiter);
+
+  // Stricter rate limiter for Gemini Generative AI endpoints (30 requests/minute per client IP)
+  const aiLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    limit: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+      error: 'AI request limit reached. Please wait a moment before sending more queries.',
+      code: 'AI_RATE_LIMIT_EXCEEDED',
+    },
+  });
+  app.use('/api/ai/', aiLimiter);
 
   app.get('/api/health', (_req, res) => {
     res.json({
@@ -254,6 +316,12 @@ async function startServer() {
     next(err);
   });
 
+  return app;
+}
+
+async function startServer() {
+  const app = createExpressApp();
+
   if (!IS_PROD) {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
@@ -274,7 +342,9 @@ async function startServer() {
   });
 }
 
-startServer().catch((err) => {
-  console.error('Failed to start FreshAir-AI server:', err);
-  process.exit(1);
-});
+if (!process.env.VITEST) {
+  startServer().catch((err) => {
+    console.error('Failed to start FreshAir-AI server:', err);
+    process.exit(1);
+  });
+}
